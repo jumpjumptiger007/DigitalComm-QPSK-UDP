@@ -1,0 +1,152 @@
+/**
+ * UDP Transmission with Data Padding
+ * 
+ * This program demonstrates QPSK modulation with noise and sends the data
+ * over UDP with padding to meet specific data format requirements.
+ * 
+ * Compile with: gcc -o udp_padding UDP_padding.c -lm
+ * Run with: ./udp_padding
+ * 
+ * Note: Configure the IP address and port before running.
+ */
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
+#include <assert.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <time.h>
+#include <math.h>
+
+#define BITS_COUNT 40         // Total number of random bits to generate
+#define SYMBOLS_COUNT 20      // Number of QPSK symbols (each symbol encodes 2 bits)
+#define NOISE_STD_DEV 0.05    // Standard deviation of noise to be added to symbols
+#define BUFFER_SIZE 256       // Size of the buffer for data transmission
+#define PADDING 256           // Initial padding size in bytes
+#define MIDDLE_PADDING 216    // Padding between real and imaginary data
+
+/**
+ * Structure to represent a complex number with real and imaginary parts
+ */
+typedef struct {
+    double real;
+    double imag;
+} Complex;
+
+/**
+ * Function to convert a float value to a byte array
+ * 
+ * @param value  The float value to convert
+ * @param bytes  Pointer to the byte array where the result will be stored
+ */
+void floatToBytes(float value, unsigned char *bytes) {
+    memcpy(bytes, &value, sizeof(float));
+}
+
+int main() {
+    int i, j, bit1, bit2;
+
+    // Initialize random number generator with current time as seed
+    srand(time(0));
+
+    // Step 1: Generate random data bits
+    int data_bits[BITS_COUNT];
+    for (i = 0; i < BITS_COUNT; i++) {
+        data_bits[i] = rand() % 2;
+    }
+
+    // Step 2: Perform QPSK modulation and add noise
+    Complex symbols[SYMBOLS_COUNT];
+    for (i = 0, j = 0; i < BITS_COUNT; i += 2, j++) {
+        bit1 = data_bits[i];
+        bit2 = data_bits[i + 1];
+
+        // Map the two bits to a symbol using QPSK modulation
+        Complex symbol;
+        if (bit1 == 0 && bit2 == 0) {
+            symbol.real = 1 / sqrt(2);
+            symbol.imag = 1 / sqrt(2);
+        } else if (bit1 == 0 && bit2 == 1) {
+            symbol.real = -1 / sqrt(2);
+            symbol.imag = 1 / sqrt(2);
+        } else if (bit1 == 1 && bit2 == 0) {
+            symbol.real = 1 / sqrt(2);
+            symbol.imag = -1 / sqrt(2);
+        } else if (bit1 == 1 && bit2 == 1) {
+            symbol.real = -1 / sqrt(2);
+            symbol.imag = -1 / sqrt(2);
+        }
+
+        // Add noise to the symbols
+        double noise_real = NOISE_STD_DEV * (2 * ((double)rand() / RAND_MAX) - 1);
+        double noise_imag = NOISE_STD_DEV * (2 * ((double)rand() / RAND_MAX) - 1);
+        symbol.real += noise_real;
+        symbol.imag += noise_imag;
+
+        symbols[j] = symbol;
+    }
+
+    // Step 3: Display the modulated symbols
+    Complex qpsk_symbols[SYMBOLS_COUNT];
+    printf("qpsk_symbols[] = {");
+    for (i = 0; i < SYMBOLS_COUNT; i++) {
+        qpsk_symbols[i] = symbols[i];
+        printf("(%f,%f)", qpsk_symbols[i].real, qpsk_symbols[i].imag);
+        if (i < SYMBOLS_COUNT - 1) {
+            printf(",");
+        }
+    }
+    printf("}\n");
+    
+    // Step 4: Prepare buffer with padding for UDP transmission
+    // Calculate the total buffer size needed
+    int total_buffer_size = (PADDING * 2) + (SYMBOLS_COUNT * sizeof(float) * 2) + (MIDDLE_PADDING * 2);
+    unsigned char byteBuffer[total_buffer_size];
+
+    // Initialize all bytes in the buffer to zero
+    memset(byteBuffer, 0, total_buffer_size);
+
+    // Add real parts after initial padding
+    int offset = PADDING;
+    for (i = 0, j = offset; i < SYMBOLS_COUNT; i++, j += sizeof(float)) {
+        floatToBytes(symbols[i].real, byteBuffer + j);
+    }
+
+    // Add imaginary parts after middle padding
+    offset += SYMBOLS_COUNT * sizeof(float) + MIDDLE_PADDING;
+    for (i = 0, j = offset; i < SYMBOLS_COUNT; i++, j += sizeof(float)) {
+        floatToBytes(symbols[i].imag, byteBuffer + j);
+    }
+
+    // Debug: Print buffer content as hex values
+    printf("Buffer content:\n");
+    for(i = 0; i < total_buffer_size; i++) {
+        printf("%02X ", byteBuffer[i]);
+        if ((i + 1) % 16 == 0) printf("\n");
+    }
+    printf("\n");
+    
+    // Step 5: Send buffer over UDP
+    int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (sockfd == -1) {
+        perror("socket creation failed");
+        return 1;
+    }
+
+    struct sockaddr_in saddr;
+    memset(&saddr, 0, sizeof(saddr));
+    saddr.sin_family = AF_INET;
+    saddr.sin_port = htons(49884);
+    saddr.sin_addr.s_addr = inet_addr("127.0.0.1");
+
+    sendto(sockfd, byteBuffer, total_buffer_size, 0, (struct sockaddr *)&saddr, sizeof(saddr));
+
+    close(sockfd);
+
+    printf("Message has been sent.\n");
+
+    return 0;
+}
