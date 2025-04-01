@@ -4,7 +4,7 @@
 
 This repository contains a complete implementation of digital communication techniques focusing on QPSK (Quadrature Phase Shift Keying) modulation and UDP (User Datagram Protocol) transmission. The project demonstrates the entire signal processing pipeline from random data generation to transmission over a network, including visualization of the modulation process.
 
-[![Live Demo](https://img.shields.io/badge/Live%20Demo-View%20Visualization-blue?style=for-the-badge&logo=react)](https://yliu.tech/DigitalComm-QPSK-UDP)
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-View%20Visualization-blue?style=for-the-badge&logo=react)](https://yliu.tech/projects/qpsk-modulation)
 
 The implementation covers:
 - Random data generation
